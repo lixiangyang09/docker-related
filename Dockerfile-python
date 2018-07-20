@@ -1,0 +1,60 @@
+FROM centos:7
+
+MAINTAINER xiangyang.li <lixiangyang@rheafin.com>
+
+ENV TZ "Asia/Shanghai"
+
+ENV DOCKER_HOME=/root
+
+RUN rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7 \
+    && yum -y install gcc automake autoconf libtool make git gcc gcc-c++ sqlite-devel zlib-devel openssl-devel net-tools
+
+
+ENV PATH="/data/python3/bin:$PATH"
+
+ADD Python-3.6.6.tgz .
+
+ADD Setup Python-3.6.6/Modules/Setup
+ADD requirements.txt requirements.txt
+
+RUN ls \
+    && cd Python-3.6.6 \
+    && ./configure --enable-optimizations --enable-loadable-sqlite-extensions \
+    && make \
+    && make install
+
+RUN rm -rf Python-3.6.6
+
+RUN rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm \
+    && yum install -y nginx \
+    && pip3 install uwsgi pipenv
+
+
+WORKDIR $DOCKER_HOME
+# ADD uwsgi.service /usr/lib/systemd/system/uwsgi.service
+ADD entrypoint.sh entrypoint.sh
+RUN chmod u+x entrypoint.sh
+
+EXPOSE 80
+
+#RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == \
+#systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+#rm -f /lib/systemd/system/multi-user.target.wants/*;\
+#rm -f /etc/systemd/system/*.wants/*;\
+#rm -f /lib/systemd/system/local-fs.target.wants/*; \
+#rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+#rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+#rm -f /lib/systemd/system/basic.target.wants/*;\
+#rm -f /lib/systemd/system/anaconda.target.wants/*;
+#VOLUME [ "/sys/fs/cgroup" ]
+
+#ENTRYPOINT ["/usr/sbin/init"]
+
+ENTRYPOINT ["./entrypoint.sh"]
+
+
+
+
+
+
+

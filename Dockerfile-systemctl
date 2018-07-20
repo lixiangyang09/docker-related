@@ -1,0 +1,77 @@
+#当你写下FROM centos:7的时候，你就要想着，在这以后的每一步操作都是在centos 7系统镜像中进行的操作，
+#你以前是怎么部署应用的，那么请按照你以前的步骤一步一步来就好。
+FROM centos:7 
+#声明镜像制作者
+MAINTAINER boli <libo@rheafin.com>
+
+#设置时区
+ENV TZ "Asia/Shanghai"
+
+# 设置系统环境变量DOCKER_SRC
+ENV DOCKER_SRC=crmsite
+# 设置系统环境变量DOCKER_HOME
+ENV DOCKER_HOME=/root
+# 设置系统环境变量DOCKER_PROJECT
+ENV DOCKER_PROJECT=/root/project
+
+#这句指令相当与：cd /root
+WORKDIR $DOCKER_HOME
+#紧接着在root目录下面创建了两个文件夹
+RUN mkdir media static
+
+#安装应用运行所需要的工具依赖pip，git好像没用上，mysql客户端，
+#nc是一个网络工具，端口检测脚本wait-for-it.sh里面有使用这个软件
+
+RUN yum-builddep -y python
+
+
+
+
+# cd $DOCKER_PROJECT
+WORKDIR $DOCKER_PROJECT
+
+RUN yum -y install gcc automake autoconf libtool make git gcc gcc-c++
+
+RUN curl -fSL "https://www.python.org/ftp/python/3.6.6/Python-3.6.6.tgz" -o Python-3.6.6.tgz
+RUN tar -xvf Python-3.6.6.tgz
+WORKDIR Python-3.6.6
+RUN  ./configure --prefix=/data/python3 
+RUN make
+RUN make install
+WORKDIR $DOCKER_PROJECT
+ENV PATH="/data/python3/bin:$PATH"
+ADD nginx.repo /etc/yum.repos.d/nginx.repo
+ADD uwsgi.service /usr/lib/systemd/system/uwsgi.service
+RUN yum -y install  nginx
+
+# . 表示当前目录，一是Dockerfile所在的目录，二是刚刚设置的DOCKER_PROJECT目录，
+#这一步操作将会把项目中application目录下的所有文件拷贝到镜像目录DOCKER_PROJECT=/root/project下面
+#这一步安装python依赖软件django、Pillow、mysql-python、uwsgi、django-ckeditor。
+#补充，-i 是修改pip源，默认的源速度很慢，经常卡在这里。
+ADD requirements.txt requirements.txt
+ADD src src
+
+RUN pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+#暴露端口8000，到时候执行docker run 的时候才好把宿主机端口映射到8000
+EXPOSE 8000
+#赋予start_script执行权限
+ADD start_script start_script
+RUN chmod u+x start_script
+#容器启动后要执行的命令
+#ENTRYPOINT ["./start_script"]
+
+ENV container docker
+RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == \
+systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+rm -f /lib/systemd/system/multi-user.target.wants/*;\
+rm -f /etc/systemd/system/*.wants/*;\
+rm -f /lib/systemd/system/local-fs.target.wants/*; \
+rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+rm -f /lib/systemd/system/basic.target.wants/*;\
+rm -f /lib/systemd/system/anaconda.target.wants/*;
+VOLUME [ "/sys/fs/cgroup" ]
+
+RUN systemctl enable nginx
+RUN systemctl enable uwsgi
+ENTRYPOINT ["/usr/sbin/init"]
